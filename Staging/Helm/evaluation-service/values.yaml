@@ -1,7 +1,7 @@
 evaluation-service:
   replicaCount: 2
   namespace: evaluation-service
-  image: 778900740186.dkr.ecr.us-east-1.amazonaws.com/evaluation-service:staging-f4d6212
+  image: 778900740186.dkr.ecr.us-east-1.amazonaws.com/evaluation-service:staging-6ed2bce
   imagePullPolicy: IfNotPresent
   port: 8080
   imagePullSecrets:
