@@ -31,9 +31,9 @@ evaluation-service:
       failureThreshold: 3
   envFrom:
     - secretRef:
-        name: evaluation-service-db-secret
+        name: evaluation-service-urls
     - secretRef:
-        name: evaluation-service-db-secret-host
+        name: evaluation-service-config
 
   autoscaling:
     enabled: true
