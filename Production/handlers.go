@@ -40,7 +40,8 @@ func (a *App) evaluationHandler(w http.ResponseWriter, r *http.Request) {
 			result = false
 		} else {
 			// Outros erros (serviços offline, etc)
-			log.Printf("Erro ao avaliar flag '%s': %v", flagName, err)
+			// #nosec G706 -- flagName escapado via %q
+			log.Printf("Erro ao avaliar flag %q: %v", flagName, err)
 			http.Error(w, `{"error": "Erro interno ao avaliar a flag"}`, http.StatusBadGateway)
 			return
 		}
@@ -53,11 +54,12 @@ func (a *App) evaluationHandler(w http.ResponseWriter, r *http.Request) {
 	// 4. Retornar a resposta
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(EvaluationResponse{
-	    FlagName: flagName,
-	    UserID:   userID,
-	    Result:   result,
+		FlagName: flagName,
+		UserID:   userID,
+		Result:   result,
 	}); err != nil {
-	    log.Printf("Erro ao retornar avaliação da flag '%s' para usuário '%s': %v", flagName, userID, err)
+		// #nosec G706 -- flagName e userID escapados via %q
+		log.Printf("Erro ao retornar avaliação da flag %q para usuário %q: %v", flagName, userID, err)
 	}
 
 }

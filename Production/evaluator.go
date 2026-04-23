@@ -1,16 +1,17 @@
 package main
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- uso não-criptográfico para bucketing determinístico de rollout
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"sync"
 	"time"
-	"os"
 )
 
 const (
@@ -40,14 +41,17 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 		// Cache HIT
 		var info CombinedFlagInfo
 		if err := json.Unmarshal([]byte(val), &info); err == nil {
-			log.Printf("Cache HIT para flag '%s'", flagName)
+			// #nosec G706 -- flagName escapado via %q
+			log.Printf("Cache HIT para flag %q", flagName)
 			return &info, nil
 		}
 		// Se o unmarshal falhar, trata como cache miss
-		log.Printf("Erro ao desserializar cache para flag '%s': %v", flagName, err)
+		// #nosec G706 -- flagName escapado via %q
+		log.Printf("Erro ao desserializar cache para flag %q: %v", flagName, err)
 	}
-	
-	log.Printf("Cache MISS para flag '%s'", flagName)
+
+	// #nosec G706 -- flagName escapado via %q
+	log.Printf("Cache MISS para flag %q", flagName)
 	// 2. Cache MISS - Buscar dos serviços
 	info, err := a.fetchFromServices(flagName)
 	if err != nil {
@@ -57,9 +61,10 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 	// 3. Salvar no Cache
 	jsonData, err := json.Marshal(info)
 	if err == nil {
-	    if err := a.RedisClient.Set(ctx, cacheKey, jsonData, CACHE_TTL).Err(); err != nil {
-	        log.Printf("Erro ao salvar flag '%s' no Redis: %v", flagName, err)
-	    }
+		if err := a.RedisClient.Set(ctx, cacheKey, jsonData, CACHE_TTL).Err(); err != nil {
+			// #nosec G706 -- flagName escapado via %q
+			log.Printf("Erro ao salvar flag %q no Redis: %v", flagName, err)
+		}
 	}
 
 	return info, nil
@@ -92,7 +97,8 @@ func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
 		return nil, flagErr
 	}
 	if ruleErr != nil {
-		log.Printf("Aviso: Nenhuma regra de segmentação encontrada para '%s'. Usando padrão.", flagName)
+		// #nosec G706 -- flagName escapado via %q
+		log.Printf("Aviso: Nenhuma regra de segmentação encontrada para %q. Usando padrão.", flagName)
 	}
 
 	return &CombinedFlagInfo{
@@ -103,12 +109,17 @@ func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
 
 // fetchFlag (função helper)
 func (a *App) fetchFlag(flagName string) (*Flag, error) {
-	url := fmt.Sprintf("%s/flags/%s", a.FlagServiceURL, flagName)
+	reqURL := fmt.Sprintf("%s/flags/%s", a.FlagServiceURL, url.PathEscape(flagName))
 
 	apiKey := os.Getenv("SERVICE_API_KEY")
-	req, _ := http.NewRequest("GET", url, nil)
+	// #nosec G704 -- host vem de env var configurada; segmento de path escapado via url.PathEscape
+	req, err := http.NewRequest("GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao montar request para flag-service: %w", err)
+	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	
+
+	// #nosec G704 -- host vem de env var configurada; segmento de path escapado via url.PathEscape
 	resp, err := a.HttpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao chamar flag-service: %w", err)
@@ -131,11 +142,16 @@ func (a *App) fetchFlag(flagName string) (*Flag, error) {
 }
 
 func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
-	url := fmt.Sprintf("%s/rules/%s", a.TargetingServiceURL, flagName)
+	reqURL := fmt.Sprintf("%s/rules/%s", a.TargetingServiceURL, url.PathEscape(flagName))
 	apiKey := os.Getenv("SERVICE_API_KEY") // Usa a mesma chave
-	req, _ := http.NewRequest("GET", url, nil)
+	// #nosec G704 -- host vem de env var configurada; segmento de path escapado via url.PathEscape
+	req, err := http.NewRequest("GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao montar request para targeting-service: %w", err)
+	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	
+
+	// #nosec G704 -- host vem de env var configurada; segmento de path escapado via url.PathEscape
 	resp, err := a.HttpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao chamar targeting-service: %w", err)
@@ -173,7 +189,8 @@ func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
 		// Converte o 'value' (que é interface{}) para float64
 		percentage, ok := rule.Value.(float64)
 		if !ok {
-			log.Printf("Erro: valor da regra de porcentagem não é um número para a flag '%s'", info.Flag.Name)
+			// #nosec G706 -- Flag.Name escapado via %q
+			log.Printf("Erro: valor da regra de porcentagem não é um número para a flag %q", info.Flag.Name)
 			return false
 		}
 		
@@ -190,6 +207,7 @@ func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
 
 func getDeterministicBucket(input string) int {
 	// Usamos SHA1 (rápido) e pegamos os primeiros 4 bytes
+	// #nosec G401 -- uso não-criptográfico para bucketing determinístico de rollout
 	hasher := sha1.New()
 	hasher.Write([]byte(input))
 	hash := hasher.Sum(nil)

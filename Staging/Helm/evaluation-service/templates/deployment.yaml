@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: app-evaluation-service
+    {{- include "togglemaster.labels" .| nindent 4 }}
+  name: app-evaluation-service
+  namespace: {{ (index .Values "evaluation-service").namespace }}
+spec:
+  strategy:
+    type: Recreate
+  replicas: {{ (index .Values "evaluation-service").replicas}}
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      app: app-evaluation-service
+  template:
+    metadata:
+      labels:
+        app: app-evaluation-service
+    spec:
+      containers:
+        - name: app-evaluation-service
+          image: {{ (index .Values "evaluation-service").image }}
+          imagePullPolicy: {{ (index .Values "evaluation-service").imagePullPolicy }}
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          startupProbe:
+           httpGet:
+             path: /health
+             port: {{ (index .Values "evaluation-service").port }}
+           failureThreshold: 180
+           periodSeconds: 1
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ (index .Values "evaluation-service").port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ (index .Values "evaluation-service").port }}
+            initialDelaySeconds: 180
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          envFrom:
+            - secretRef:
+                name: evaluation-service-db-secret #Credentials to db login and generics
+            - secretRef:
+                name: evaluation-service-db-secret-host #Credential to db login (host)

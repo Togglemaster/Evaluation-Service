@@ -1,0 +1,48 @@
+evaluation-service:
+  replicaCount: 2
+  namespace: evaluation-service
+  image: "057096910794.dkr.ecr.us-east-1.amazonaws.com/evaluation-service:1.0.0"
+  imagePullPolicy: IfNotPresent
+  port: 8080
+  imagePullSecrets:
+    - name: ecr-secret
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+  probes:
+    enabled: true
+    path: /health
+    startup:
+      failureThreshold: 180
+      periodSeconds: 1
+    readiness:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    liveness:
+      initialDelaySeconds: 180
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+  envFrom:
+    - secretRef:
+        name: evaluation-service-urls
+    - secretRef:
+        name: evaluation-service-config
+    - secretRef:
+        name: shared-api-key
+
+  ingress:
+    path: /evaluation-service(/|$)(.*)
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
