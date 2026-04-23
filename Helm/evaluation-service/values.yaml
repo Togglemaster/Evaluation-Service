@@ -35,6 +35,9 @@ evaluation-service:
     - secretRef:
         name: evaluation-service-config
 
+  ingress:
+    path: /evaluation-service(/|$)(.*)
+
   autoscaling:
     enabled: true
     minReplicas: 2
