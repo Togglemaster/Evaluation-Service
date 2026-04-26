@@ -55,7 +55,7 @@ spec:
             - name: ADMIN_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: evaluation-service-db-secret
+                  name: evaluation-service-config
                   key: MASTER_KEY
           command: ["/bin/bash", "-c"]
           args:
