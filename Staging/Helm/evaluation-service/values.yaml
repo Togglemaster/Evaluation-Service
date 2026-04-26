@@ -1,5 +1,5 @@
-evaluation-service:
-  replicaCount: 2
+﻿evaluation-service:
+  replicas: 1
   namespace: evaluation-service
   image: 778900740186.dkr.ecr.us-east-1.amazonaws.com/evaluation-service:staging-6770d7f
   imagePullPolicy: IfNotPresent
@@ -42,7 +42,7 @@ evaluation-service:
 
   autoscaling:
     enabled: true
-    minReplicas: 2
+    minReplicas: 1
     maxReplicas: 3
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 80
