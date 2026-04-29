@@ -1,7 +1,7 @@
-﻿evaluation-service:
+evaluation-service:
   replicas: 1
   namespace: evaluation-service
-  image: 778900740186.dkr.ecr.us-east-1.amazonaws.com/evaluation-service:staging-6770d7f
+  image: 778900740186.dkr.ecr.us-east-1.amazonaws.com/evaluation-service:staging-a9ea11f
   imagePullPolicy: IfNotPresent
   port: 8080
   imagePullSecrets:
@@ -36,10 +36,8 @@
         name: evaluation-service-config
     - secretRef:
         name: shared-api-key
-
   ingress:
     path: /evaluation-service(/|$)(.*)
-
   autoscaling:
     enabled: true
     minReplicas: 1
