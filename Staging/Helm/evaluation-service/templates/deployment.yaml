@@ -34,8 +34,9 @@ spec:
            httpGet:
              path: /health
              port: {{ (index .Values "evaluation-service").port }}
-           failureThreshold: 180
-           periodSeconds: 1
+           failureThreshold: 60
+           periodSeconds: 5
+           timeoutSeconds: 3
           readinessProbe:
             httpGet:
               path: /health
