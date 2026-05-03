@@ -3,7 +3,7 @@ evaluation-service:
   namespace: evaluation-service
   image: 778900740186.dkr.ecr.us-east-1.amazonaws.com/evaluation-service:staging-473c309
   imagePullPolicy: IfNotPresent
-  port: 8080
+  port: 8004
   imagePullSecrets:
     - name: ecr-secret
   resources:
