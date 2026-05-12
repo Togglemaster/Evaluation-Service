@@ -1,5 +1,5 @@
 # Etapa 1: Build do Go
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ RUN orchestrion pin
 # 6. Compila a aplicação
 # O 'go build' agora usará o go.mod e o go.sum criados pelo 'tidy'
 #RUN CGO_ENABLED=0 go build -o auth-service -ldflags "-s -w" .
-RUN CGO_ENABLED=0 orchestrion go build -o auth-service -ldflags "-s -w" .
+RUN CGO_ENABLED=0 orchestrion go build -o evaluation-service -ldflags "-s -w" .
 
 # Etapa 2: Container final mais leve
 FROM alpine:3.23
