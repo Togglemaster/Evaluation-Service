@@ -23,6 +23,11 @@ spec:
         - name: app-evaluation-service
           image: {{ (index .Values "evaluation-service").image }}
           imagePullPolicy: {{ (index .Values "evaluation-service").imagePullPolicy }}
+          env:
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
           resources:
             requests:
               cpu: "100m"
