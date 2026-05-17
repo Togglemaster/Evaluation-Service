@@ -35,6 +35,8 @@ evaluation-service:
     - secretRef:
         name: evaluation-service-config
     - secretRef:
+        name: evaluation-service-credentials
+    - secretRef:
         name: shared-api-key
   ingress:
     path: /evaluation-service(/|$)(.*)
