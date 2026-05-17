@@ -35,6 +35,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          repository: Togglemaster/Evaluation-Service
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -97,6 +99,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          repository: Togglemaster/Evaluation-Service
 
       # -----------------------------
       # 5. Docker Build
@@ -163,6 +167,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          repository: Togglemaster/Evaluation-Service
           fetch-depth: 0
           token: ${{ secrets.GITOPS_TOKEN }}
 
