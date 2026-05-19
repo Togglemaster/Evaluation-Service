@@ -1,145 +1,328 @@
-# evaluation-service (Go)
+# Evaluation Service ⚡
 
-Este é o serviço de avaliação, o "caminho quente" (hot path) do projeto ToggleMaster. É o único endpoint que os clientes finais (ex: seu app mobile, seu site) devem chamar.
+Serviço de avaliação de feature flags do **ToggleMaster**. Este é o serviço crítico de "hot path" (caminho crítico) onde clientes finais fazem requisições para avaliar se uma feature flag está ativa para um usuário específico.
 
-Ele é otimizado para alta velocidade e baixa latência usando **cache em Redis**.
+## 🎯 Descrição do Serviço
 
-Ele funciona da seguinte forma:
-1.  Recebe uma requisição (`/evaluate?user_id=...&flag_name=...`).
-2.  Busca as regras da flag no **Redis**.
-3.  **Se não estiver no cache (Cache MISS):**
-    * Busca a definição da flag no `flag-service`.
-    * Busca a regra no `targeting-service`.
-    * Salva o resultado no Redis com um TTL (Time-To-Live) curto.
-4.  Executa a lógica de avaliação (ex: "o usuário está nos 50%?").
-5.  Retorna `true` ou `false` para o cliente.
-6.  Envia *assincronamente* um evento da decisão para uma fila **AWS SQS**.
+O Evaluation Service é otimizado para alta velocidade e baixa latência. Ele:
 
-## 📦 Pré-requisitos (Local)
+1. Recebe requisições de avaliação de flags (`/evaluate?user_id=...&flag_name=...`)
+2. Busca regras da flag em cache Redis (alta velocidade)
+3. Em caso de cache miss: busca definição no Flag Service e regras no Targeting Service
+4. Executa a lógica de avaliação (ex: usuário está nos 50%?)
+5. Retorna `true` ou `false` imediatamente ao cliente
+6. Envia eventos assincronamente para AWS SQS (para análise posterior)
 
-* [Go](https://go.dev/doc/install) (versão 1.21 ou superior)
-* [Redis](https://redis.io/docs/getting-started/installation/) (rodando localmente ou em Docker)
-* Os serviços `auth-service`, `flag-service` e `targeting-service` devem estar rodando.
-* **Credenciais da AWS:** Para o SQS funcionar, seu terminal deve estar autenticado na AWS (ex: via `aws configure` ou variáveis de ambiente).
+**Crítico para:** Qualquer cliente que precisa saber se uma flag está ativa para um usuário específico em tempo real.
 
-## 🚀 Rodando Localmente
+## 📦 Stack Técnico
 
-1.  **Clone o repositório** e entre na pasta `evaluation-service`.
+- **Linguagem:** Go 1.21+
+- **Framework:** Gin Web Framework
+- **Cache:** Redis
+- **Filas:** AWS SQS
+- **Dependências principais:** go-redis/redis, aws-sdk-go, gin-gonic/gin
 
-2.  **Crie uma Chave de API de Serviço:**
-    Este serviço precisa se autenticar no `flag-service` e no `targeting-service`. Você deve criar uma chave de API para ele usando o `auth-service` (com a `MASTER_KEY`).
-    ```bash
-    curl -X POST http://localhost:8001/admin/keys \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer admin-secreto-123" \
-    -d '{"name": "evaluation-service-key"}'
-    ```
-    Guarde a chave `key` retornada (ex: `tm_key_...`). Vamos chamá-la de `SUA_CHAVE_DE_SERVICO`.
+## 🚀 Como Usar
 
-3.  **Configure as Variáveis de Ambiente:**
-    Crie um arquivo chamado `.env` na raiz desta pasta com o seguinte conteúdo:
-    ```.env
-    # Porta que este serviço irá rodar
-    PORT="8004"
-    
-    # URL do seu Redis local
-    REDIS_URL="redis://localhost:6379"
-    
-    # URLs dos outros serviços
-    FLAG_SERVICE_URL="http://localhost:8002"
-    TARGETING_SERVICE_URL="http://localhost:8003"
-    
-    # Chave de API que você criou no passo 2
-    SERVICE_API_KEY="SUA_CHAVE_DE_SERVICO"
-    
-    # --- Configuração da AWS (Obrigatório para o desafio) ---
-    # Cole a URL da fila SQS que você criou no console da AWS
-    AWS_SQS_URL="[https://sqs.us-east-1.amazonaws.com/123456789012/sua-fila](https://sqs.us-east-1.amazonaws.com/123456789012/sua-fila)"
-    
-    # Região da sua fila SQS
-    AWS_REGION="us-east-1" 
-    ```
+### Pré-requisitos Locais
 
-4.  **Instale as Dependências:**
-    ```bash
-    go mod tidy
-    ```
+- Go 1.21 ou superior
+- Redis 6+ (instalado ou via Docker)
+- Conta AWS com permissões para SQS
+- Os seguintes serviços rodando:
+  - Auth Service (porta 8001)
+  - Flag Service (porta 8002)
+  - Targeting Service (porta 8003)
 
-5.  **Inicie o Serviço:**
-    ```bash
-    go run .
-    ```
-    O servidor estará rodando em `http://localhost:8004`.
+### Setup Local
+
+#### 1. Clone e Navegue para o Diretório
+```bash
+cd Evaluation-Service
+```
+
+#### 2. Crie uma Chave de API de Serviço
+
+Este serviço precisa se autenticar nos outros serviços. Use o Auth Service para criar uma chave:
+
+```bash
+curl -X POST http://localhost:8001/admin/keys \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer admin-secreto-123" \
+  -d '{"name": "evaluation-service"}'
+
+# Resposta esperada:
+# {
+#   "key": "tm_key_a1b2c3d4e5f6g7h8...",
+#   "message": "Guarde esta chave com segurança!"
+# }
+```
+
+Guarde a chave retornada para usar no `.env`.
+
+#### 3. Configure as Variáveis de Ambiente
+Crie um arquivo `.env` na raiz do serviço:
+
+```env
+# Serviço
+PORT=8004
+
+# Redis - Cache das regras de flags
+REDIS_URL=redis://localhost:6379
+REDIS_DB=0
+CACHE_TTL_SECONDS=300
+
+# URLs dos serviços dependentes
+FLAG_SERVICE_URL=http://localhost:8002
+TARGETING_SERVICE_URL=http://localhost:8003
+
+# Chave de API para autenticação nos serviços
+SERVICE_API_KEY=tm_key_a1b2c3d4e5f6g7h8...
+
+# AWS SQS - Para enviar eventos
+AWS_REGION=us-east-1
+AWS_SQS_URL=https://sqs.us-east-1.amazonaws.com/123456789012/togglemaster-events
+
+# Configurações opcionais
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+```
+
+#### 4. Instale as Dependências
+```bash
+go mod tidy
+```
+
+#### 5. Inicie Redis (se não estiver rodando)
+```bash
+# Via Docker
+docker run -d -p 6379:6379 redis:7-alpine
+
+# Ou se estiver instalado localmente
+redis-server
+```
+
+#### 6. Inicie o Serviço
+```bash
+go run .
+```
+
+O servidor estará disponível em `http://localhost:8004`.
+
+### Testando Localmente
+
+#### Health Check
+```bash
+curl http://localhost:8004/health
+# Resposta esperada: {"status":"ok"}
+```
+
+#### Avaliar uma Flag
+```bash
+curl "http://localhost:8004/evaluate?user_id=user-123&flag_name=enable-new-dashboard"
+
+# Resposta esperada:
+# {"flag_name":"enable-new-dashboard","user_id":"user-123","enabled":true}
+```
+
+#### Testar com Diferentes Usuários
+```bash
+# Usuário 1
+curl "http://localhost:8004/evaluate?user_id=user-001&flag_name=enable-new-dashboard"
+
+# Usuário 2
+curl "http://localhost:8004/evaluate?user_id=user-002&flag_name=enable-new-dashboard"
+
+# Mesmo usuário com flag diferente
+curl "http://localhost:8004/evaluate?user_id=user-001&flag_name=beta-feature"
+```
+
+#### Monitorar Cache
+```bash
+# Conectar ao Redis
+redis-cli
+
+# Ver todas as chaves em cache
+KEYS *
+
+# Ver uma chave específica
+GET "flag:enable-new-dashboard"
+```
 
 ## 🔧 Variáveis de Ambiente
 
-O serviço requer as seguintes variáveis de ambiente para funcionar:
-
 ### Obrigatórias
-- **`REDIS_URL`** - URL de conexão com o Redis
-  - Exemplo: `redis://localhost:6379`
-- **`FLAG_SERVICE_URL`** - URL do Flag Service
-  - Exemplo: `http://localhost:8002`
-- **`TARGETING_SERVICE_URL`** - URL do Targeting Service
-  - Exemplo: `http://localhost:8003`
+| Variável | Descrição | Exemplo |
+|----------|-----------|---------|
+| `REDIS_URL` | URL de conexão com Redis | `redis://localhost:6379` |
+| `FLAG_SERVICE_URL` | URL do Flag Service | `http://localhost:8002` |
+| `TARGETING_SERVICE_URL` | URL do Targeting Service | `http://localhost:8003` |
+| `SERVICE_API_KEY` | Chave de API do serviço | `tm_key_...` |
 
-### Opcionais (recomendadas para produção)
-- **`AWS_SQS_URL`** - URL da fila SQS para enviar eventos
-  - Exemplo: `https://sqs.us-east-1.amazonaws.com/123456789012/togglemaster-events`
-  - Se não definida, eventos não serão enviados (apenas log de aviso)
-- **`AWS_REGION`** - Região AWS (obrigatória se AWS_SQS_URL for definida)
-  - Exemplo: `us-east-1`
+### AWS SQS (Recomendadas)
+| Variável | Descrição | Exemplo |
+|----------|-----------|---------|
+| `AWS_REGION` | Região AWS | `us-east-1` |
+| `AWS_SQS_URL` | URL da fila SQS | `https://sqs.us-east-1.amazonaws.com/123456789012/togglemaster-events` |
 
-### Outras Variáveis
-- **`PORT`** - Porta onde o serviço irá rodar (padrão: `8004`)
+### Opcionais
+| Variável | Descrição | Padrão |
+|----------|-----------|--------|
+| `PORT` | Porta do servidor | `8004` |
+| `REDIS_DB` | Database Redis | `0` |
+| `CACHE_TTL_SECONDS` | TTL do cache em segundos | `300` |
+| `ENVIRONMENT` | Ambiente (development/production) | `development` |
+| `LOG_LEVEL` | Nível de log | `INFO` |
 
-### Exemplo de arquivo .env
-```env
-# Configurações do serviço
-PORT="8004"
+## 🔐 GitHub Secrets Necessários
 
-# Cache e serviços dependentes
-REDIS_URL="redis://localhost:6379"
-FLAG_SERVICE_URL="http://localhost:8002"
-TARGETING_SERVICE_URL="http://localhost:8003"
+Configure os seguintes secrets no GitHub para CI/CD:
 
-# Configurações AWS (opcional para dev local)
-AWS_SQS_URL="https://sqs.us-east-1.amazonaws.com/123456789012/togglemaster-events"
-AWS_REGION="us-east-1"
+```yaml
+SERVICE_API_KEY
+  Descrição: Chave de API do Evaluation Service
+  Valor: <sua-chave-gerada>
+
+REDIS_URL
+  Descrição: URL de conexão Redis
+  Valor: redis://localhost:6379
+
+FLAG_SERVICE_URL
+  Descrição: URL do Flag Service
+  Valor: http://flag-service:8002
+
+TARGETING_SERVICE_URL
+  Descrição: URL do Targeting Service
+  Valor: http://targeting-service:8003
+
+AWS_REGION
+  Descrição: Região AWS
+  Valor: us-east-1
+
+AWS_SQS_URL
+  Descrição: URL da fila SQS
+  Valor: https://sqs.us-east-1.amazonaws.com/123456789012/togglemaster-events
+
+AWS_ACCESS_KEY_ID
+  Descrição: AWS Access Key ID
+  Valor: <sua-access-key>
+
+AWS_SECRET_ACCESS_KEY
+  Descrição: AWS Secret Access Key
+  Valor: <sua-secret-key>
+
+DOCKERHUB_USERNAME
+  Descrição: Docker Hub username
+  Valor: <seu-username>
+
+DOCKERHUB_TOKEN
+  Descrição: Docker Hub personal access token
+  Valor: <seu-token>
+
+REGISTRY_URL
+  Descrição: URL do registry de container
+  Valor: docker.io
+
+SONAR_TOKEN
+  Descrição: Token SonarQube
+  Valor: <seu-token>
 ```
 
-### Notas Importantes
-- O **Redis** é essencial para performance e cache das regras
-- **Credenciais AWS** devem ser configuradas via ambiente ou AWS CLI se usar SQS
-- Os serviços `flag-service` e `targeting-service` devem estar acessíveis
+## 📊 Endpoints da API
 
-## 🧪 Testando os Endpoints
+| Método | Endpoint | Requer Auth | Descrição |
+|--------|----------|------------|-----------|
+| GET | `/health` | Não | Verifica saúde do serviço |
+| GET | `/evaluate` | Não | Avalia flag para um usuário |
+| GET | `/cache/stats` | Não | Estatísticas de cache (desenvolvimento) |
 
-Para os testes, vamos assumir que você já criou:
-1.  Uma flag chamada `enable-new-dashboard` no `flag-service`.
-2.  Uma regra para `enable-new-dashboard` no `targeting-service` do tipo `PERCENTAGE` com valor `50`.
+### Parâmetros de Query
 
-**1. Verifique a Saúde (Health Check):**
+**`/evaluate` requer:**
+- `user_id` (string): ID único do usuário
+- `flag_name` (string): Nome da flag a avaliar
+
+## ⚡ Otimizações de Performance
+
+### Cache em Redis
+- Flags são cacheadas em Redis com TTL configurável
+- Chave de cache: `flag:{flag_name}`
+- TTL padrão: 300 segundos
+
+### Estratégia de Cache Miss
+1. Busca em Flag Service
+2. Busca em Targeting Service
+3. Valida resultado
+4. Armazena em Redis
+5. Retorna ao cliente
+
+### Async Event Publishing
+- Eventos são enviados assincronamente ao SQS
+- Não bloqueia a resposta ao cliente
+- Falhas de envio não afetam a avaliação
+
+## 🔄 Fluxo de Avaliação
+
+```
+1. Cliente requisita: GET /evaluate?user_id=X&flag_name=Y
+2. Evaluation Service:
+   a. Verifica cache Redis → Se hit, retorna
+   b. Se miss:
+      - Busca definição em Flag Service
+      - Busca regras em Targeting Service
+      - Calcula resultado
+      - Armazena em cache
+   c. Envia evento async para SQS
+3. Retorna resultado ao cliente
+```
+
+## 🐛 Troubleshooting
+
+### Problema: "redis: connection refused"
+**Solução:** Inicie Redis
 ```bash
-curl http://localhost:8004/health
+docker run -d -p 6379:6379 redis:7-alpine
+# ou
+redis-server
 ```
-Saída esperada: `{"status":"ok"}``
 
-**2. Teste a Avaliação:** Tente alguns IDs de usuário diferentes. O hash determinístico fará com que alguns caiam dentro dos 50% e outros fora.
-
+### Problema: "connection refused" para Flag/Targeting Service
+**Solução:** Verifique se os serviços estão rodando
 ```bash
-# Teste User 1
-curl "http://localhost:8004/evaluate?user_id=user-123&flag_name=enable-new-dashboard"
+curl http://localhost:8002/health  # Flag Service
+curl http://localhost:8003/health  # Targeting Service
 ```
-Saída (exemplo): `{"flag_name":"enable-new-dashboard","user_id":"user-123","result":true}`
 
+### Problema: Cache hits muito baixo
+**Solução:** Aumente o TTL do cache em `CACHE_TTL_SECONDS`
+
+### Problema: "Invalid API key"
+**Solução:** Regenere a chave de API via Auth Service
+
+## 📈 Monitoramento
+
+### Métricas importantes
+- **Latência de avaliação:** Deve ser < 10ms (com cache)
+- **Taxa de cache hit:** Deve ser > 80%
+- **Eventos enviados ao SQS:** Deve corresponder ao número de avaliações
+
+### Logs
 ```bash
-# Teste User 2
-curl "http://localhost:8004/evaluate?user_id=user-abc&flag_name=enable-new-dashboard"
+# Ver logs em tempo real
+tail -f logs/evaluation-service.log
+
+# Buscar erros
+grep "ERROR" logs/evaluation-service.log
 ```
-Saída (exemplo): `{"flag_name":"enable-new-dashboard","user_id":"user-abc","result":false}`
 
-**3. Verifique o Cache:** Execute o mesmo comando duas vezes seguidas. Na segunda vez, você verá um log "Cache HIT" no terminal do `evaluation-service`.
+## 📚 Recursos Adicionais
 
-**4. Verifique a Fila SQS:** Após fazer as chamadas acima, vá até o console da AWS, abra sua fila SQS e verifique se as mensagens (`EvaluationEvent`) estão chegando.
+- [Go Documentation](https://golang.org/doc/)
+- [Redis Documentation](https://redis.io/documentation)
+- [AWS SQS Documentation](https://docs.aws.amazon.com/sqs/)
+- [ToggleMaster Architecture](../README.md)
 
+## 👥 Suporte
+
+Para dúvidas ou problemas, abra uma issue no repositório principal ou entre em contato com o time DevOps.
